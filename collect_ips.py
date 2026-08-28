@@ -24,6 +24,10 @@ urls = [
 # 正则表达式用于匹配IP地址
 ip_pattern = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
 
+# 延迟阈值（毫秒）：超过 MAX_LATENCY 的 IP 丢弃，不写入 ip.txt。
+# 90ms 以下的优先使用——由 ip.txt 内按延迟升序排序 + 同步端取前 N 个 自动保证。
+MAX_LATENCY = 150.0
+
 # 运营商线路标签归一化：
 #   090227 的 CM-Default / CU-Default / CT-Default → 移动 / 联通 / 电信
 #   无线路信息的 IP 统一标记为 ANY（通用），供华为云按线路分组时补足、CF 忽略线路。
@@ -199,10 +203,17 @@ def sort_key(item):
     return (line, latency if latency is not None else float('inf'), ip)
 
 
+dropped = 0
 with open('ip.txt', 'w', encoding='utf-8') as file:
     for (ip, line), latency in sorted(all_ips.items(), key=sort_key):
+        # 丢弃延迟超过阈值的 IP（无延迟 None 的保留，排在该线路最后）
+        if latency is not None and latency > MAX_LATENCY:
+            dropped += 1
+            continue
         lat_str = f'{latency:g}' if latency is not None else ''
         file.write(f'{ip}#{line}#{lat_str}\n')
 
+kept = len(all_ips) - dropped
 unique_ip_count = len({ip for (ip, _) in all_ips.keys()})
-print(f'总共找到 {unique_ip_count} 个唯一IP（{len(all_ips)} 条线路记录），已保存到 ip.txt 文件中。')
+print(f'总共 {len(all_ips)} 条线路记录：保留 {kept} 条，丢弃 {dropped} 条（延迟>{MAX_LATENCY:g}ms）')
+print(f'唯一IP {unique_ip_count} 个，已保存到 ip.txt。')
