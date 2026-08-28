@@ -132,9 +132,10 @@ for url in urls:
 
         if url == 'https://addressesapi.090227.xyz/CloudFlareYes':
             # 纯文本，格式 `IP#运营商线路`（如 104.17.245.114#CT-Default）
-            # 无延迟数据，但行顺序即优选序——用行号作为隐式延迟，保证排序时靠前
+            # 该接口无延迟数据。不用行号当假延迟（会扭曲按延迟排序），
+            # 留空延迟(None)，排序时排到该线路最后，让有真实延迟的 IP 优先。
             count = 0
-            for idx, raw in enumerate(text.splitlines()):
+            for raw in text.splitlines():
                 raw = raw.strip()
                 if not raw:
                     continue
@@ -144,8 +145,7 @@ for url in urls:
                     ip, tag = raw, 'ANY'
                 ip = ip.strip()
                 if re.fullmatch(ip_pattern, ip):
-                    # 用行号当延迟：越靠前越优（行号小=延迟小）
-                    add_ip(ip, tag, float(idx))
+                    add_ip(ip, tag, None)
                     count += 1
             print(f"  从{url}找到{count}个IP")
             continue
