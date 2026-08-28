@@ -29,8 +29,10 @@ jobs:
     - name: Run update script
       env:
         CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        CF_ZONE: ${{ secrets.CF_ZONE }}                 # 隐藏的 CF 托管域名，从 Secret 注入
+        CF_ZONE: ${{ secrets.CF_ZONE }}                     # 隐藏的 CF 托管域名，从 Secret 注入
         HUAWEICLOUD_SDK_AK: ${{ secrets.HUAWEICLOUD_SDK_AK }}
         HUAWEICLOUD_SDK_SK: ${{ secrets.HUAWEICLOUD_SDK_SK }}
+        HUAWEI_ZONE: ${{ secrets.HUAWEI_ZONE }}             # 隐藏的华为云托管域名
+        HUAWEI_ZONE_PROJECT: ${{ secrets.HUAWEI_ZONE_PROJECT }}  # 隐藏的华为云项目 ID
       run: |
         python bestdomain.py

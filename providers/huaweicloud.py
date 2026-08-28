@@ -9,6 +9,7 @@ config.yml 中 provider 写 huaweicloud。
 记录集：华为云一个 (name, line) 对应一个记录集，records 是多个 IP 数组。
 创建/更新统一走 create_record_set_with_line（带 line），支持解析线路选择。
 """
+import os
 import time
 
 from .huawei_sdk_client import HuaweiDnsClient
@@ -44,14 +45,26 @@ def merge_domain_config(credentials, domain_config):
     """
     merged = dict(credentials)
     domain_cfg = domain_config or {}
-    for key in ('region', 'endpoint', 'line', 'ttl', 'project_id'):
+    for key in ('region', 'endpoint', 'line', 'ttl'):
         val = domain_cfg.get(key)
         if val:
             merged[key] = val
 
+    # project_id 读取优先级：域名段 project_id_env 指定的环境变量 > 域名段 project_id 明文
+    # > 凭据里已有的（环境变量 HUAWEICLOUD_SDK_PROJECT_ID）
+    project_id = ''
+    proj_env = (domain_cfg.get('project_id_env') or '').strip()
+    if proj_env:
+        project_id = os.getenv(proj_env, '').strip()
+    if not project_id:
+        project_id = (domain_cfg.get('project_id') or '').strip()
+    if project_id:
+        merged['project_id'] = project_id
+
     # 华为云 SDK 需要 project_id，缺失则跳过该域名
     if not merged.get('project_id'):
-        print('  [跳过] 华为云域名缺少 project_id（请在域名段或环境变量 HUAWEICLOUD_SDK_PROJECT_ID 配置）')
+        print('  [跳过] 华为云域名缺少 project_id（请在域名段 project_id/project_id_env '
+              '或环境变量 HUAWEICLOUD_SDK_PROJECT_ID 配置）')
         return None
     return merged
 
