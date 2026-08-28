@@ -4,28 +4,19 @@
 # 结构：
 # 1) ip_source  全局默认优选 IP 来源（每行一个 IP）
 # 2) providers  各云厂商的「非凭据」可选默认参数段
-#               凭据一律通过环境变量（GitHub Secrets）注入，不在本文件写明文：
-#               Cloudflare    : CF_API_TOKEN
-#               华为云国际版   : HUAWEICLOUD_SDK_AK / HUAWEICLOUD_SDK_SK
-#               未注入对应环境变量的厂商会被自动跳过。
 # 3) domains    要更新的域名列表，每个域名一段
-#   - provider     用哪个厂商（cloudflare / huaweicloud / 后续可扩展如 aliyun）
-#   - zone         你在该厂商绑定的完整域名
+#   - provider     用哪个厂商（cloudflare / huaweicloud）
+#   - zone         在该厂商绑定的顶级域名
 #   - subdomains   要解析的子域名前缀列表
 #   - max_ips      (可选) 每个子域名最多解析几个 IP，默认 10，上限 10
 #   - ip_source    (可选) 该域名独立 IP 源，省略则用全局 ip_source
 #
-# 主框架规则：识别到该厂商已注入凭据环境变量才运行；未注入/空则自动跳过。
+# 规则：识别到已注入云厂商账号凭据环境变量才运行；未注入/空则自动跳过。
 # 同一 IP 源可提供给多个厂商多个域名，互不影响。
 # =====================================================
 
 # 全局默认 IP 源（collect_ips.py 采集生成的 ip.txt 的 Raw 链接）
-ip_source: https://raw.githubusercontent.com/你的用户名/你的仓库名/refs/heads/main/ip.txt
-
-# 各云厂商段。凭据不写在这里，一律用 GitHub Secrets 注入环境变量：
-#   Cloudflare    : CF_API_TOKEN
-#   华为云国际版   : HUAWEICLOUD_SDK_AK / HUAWEICLOUD_SDK_SK
-# 这里只放厂商级「非凭据」可选默认值（如 region/endpoint），域名段也可单独覆盖。
+ip_source: https://raw.githubusercontent.com/cnrot/cf-best-domain/refs/heads/main/ip.txt
 providers:
   cloudflare: {}          # 凭据用环境变量 CF_API_TOKEN 注入，此处无需填任何密钥
 
@@ -33,13 +24,13 @@ providers:
     # region: ap-southeast-1   # (可选) 默认区域，也可在每个域名段单独写
     # endpoint: ...            # (可选) 自定义端点，指定则优先于 region
 
-# 要更新的域名列表
+# 要更新的域名
 domains:
   - provider: cloudflare
-    zone: winner.cf
+    zone: dep.de5.net
     subdomains:
       - bestcf
-      - api
+     # - api
     max_ips: 5
     # ip_source: https://你的独立IP源（可选）
 
