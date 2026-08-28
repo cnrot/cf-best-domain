@@ -1,6 +1,6 @@
-# cf-best-domain · Cloudflare 优选 IP 自动更新至域名
+# cf-best-domain
 
-基于 GitHub Actions 自动化：定时抓取 Cloudflare 优选 IP，并把它们自动同步到 DNS 解析记录，让 `bestcf.example.com` 这类子域名始终指向延迟最低的 IP。
+定时抓取 Cloudflare 优选 IP，并把它们自动同步到 DNS 解析记录，让 `bestcf.example.com` 这类子域名始终指向延迟最低的 IP。
 
 ---
 
