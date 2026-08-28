@@ -1,6 +1,6 @@
-# cf-best-domain · Cloudflare 优选 IP 自动更新 DNS
+# cf-best-domain · Cloudflare 优选 IP 自动更新至域名
 
-一个基于 GitHub Actions 的自动化项目：定时抓取 Cloudflare 优选 IP，并把它们自动同步到你各云厂商（Cloudflare、华为云国际版，后续可扩展阿里云、腾讯云等）的 DNS 解析记录，让 `bestcf.example.com` 这类子域名始终指向延迟最低的 IP。
+基于 GitHub Actions 自动化：定时抓取 Cloudflare 优选 IP，并把它们自动同步到 DNS 解析记录，让 `bestcf.example.com` 这类子域名始终指向延迟最低的 IP。
 
 ---
 
@@ -18,7 +18,6 @@
   - [常见配置错误](#常见配置错误)
 - [工作原理](#工作原理)
 - [常见问题](#常见问题)
-- [开源许可](#开源许可)
 
 ---
 
@@ -31,7 +30,6 @@
   - 支持 **区域选择**：华为云等区域型厂商，每个域名可独立配置 `region` / `project_id` / `line`（解析线路）
 - ✅ 控制解析数量：每个子域名最多添加几个 IP，可自行配置（默认 10，上限 10）
 - ✅ 采集 IP 数量不足时，自动删除多余的旧 DNS 记录
-- ✅ 凭据安全：密钥只通过 GitHub Secrets 注入环境变量，不写入配置文件
 - ✅ 每 30 分钟自动运行一次（可改）
 
 ---
@@ -59,23 +57,22 @@
 
 ### 1. 准备
 
-- 一个 **GitHub 仓库**（把本项目代码提交上去）
+- 一个 **GitHub 仓库**（fork本项目）
 - 至少一家云厂商的 DNS 服务及 **API 凭据**：
   - **Cloudflare**：在 [Cloudflare API Tokens](https://dash.cloudflare.com/profile/api-tokens) 创建「编辑 DNS」权限的令牌（用于新增/删除解析记录）
   - **华为云国际版**：Access Key ID + Secret Access Key（用于签名调用华为云 DNS API）
 
 ### 2. 配置
 
-编辑 `config.yml`，最核心的两件事：
+编辑 `config.yml`：
 
 1. 改 `ip_source` 为**你仓库里 `ip.txt` 的 Raw 链接**（格式见下方）
 2. 在 `domains` 里按需填你要同步的厂商、域名和子域名
 
-详细字段见「[config.yml 配置说明](#configyml-配置说明)」。
 
 ### 3. 部署到 GitHub Actions
 
-1. 把你的仓库 **Settings → Secrets and variables → Actions** 配置好密钥：
+1. 配置环境变量，转到 **Settings → Secrets and variables → Actions** ：
 
    | Secret 名 | 说明 |
    |-----------|------|
@@ -83,9 +80,9 @@
    | `HUAWEICLOUD_SDK_AK` | 华为云 Access Key ID |
    | `HUAWEICLOUD_SDK_SK` | 华为云 Secret Access Key |
 
-   > 不用的厂商可以不配，主框架会自动跳过。
+   > 不用的厂商可以不配，会自动跳过。
 
-2. 推送代码到 GitHub。两个工作流会各每 30 分钟自动运行：
+2. 两个工作流会各每 30 分钟自动运行：
    - `Fetch IPs`：抓取优选 IP → 更新 `ip.txt`
    - `Sync DNS`：把 `ip.txt` 的 IP 同步到各厂商 DNS
 
@@ -199,8 +196,6 @@ domains:
    - 从 `ip_source` 拉取 IP 列表，每个子域名取前 `max_ips` 个写入 DNS
    - 记录与目标一致 → 跳过；不一致 → 更新；采集 IP 变少 → 自动删除多余旧记录
 
-> 提示：两个工作流各跑各的，如希望严格顺序执行（先更新 ip.txt 再同步 DNS），可在 `sync-dns.yml` 增加对 `fetch-ips.yml` 的 `workflow_run` 依赖，或统一用一个工作流。当前独立运行在多数场景够用。
-
 ---
 
 ## 常见问题
@@ -218,7 +213,3 @@ domains:
 保存后提交推送到 GitHub，`sync-dns.yml` 会在下个定时或手动触发时生效。
 
 ---
-
-## 开源许可
-
-欢迎使用、修改和传播本项目。使用本项目时请确保已获得所依赖云厂商服务的合法使用权限，并对自身使用行为负责。
