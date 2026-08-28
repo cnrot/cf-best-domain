@@ -135,16 +135,12 @@ def process_domain(module, provider_id, credentials, domain_config, ip_list):
             print('  跳过：域名级参数缺失（如 project_id）')
             return
 
-    # zone 读取优先级（隐藏敏感域名，避免公开仓库暴露）：
-    #   1) 域名段 zone_env 指定的环境变量
-    #   2) 环境变量 ZONE_<厂商ID大写>（如 ZONE_CLOUDFLARE、ZONE_HUAWEICLOUD）
-    #   3) config.yml 域名段 zone 明文（本地开发/无敏感时用）
+    # zone 读取优先级：域名段 zone_env 指定的环境变量 > config.yml zone 明文
+    # 这样公开仓库可把 zone 留空、真实域名通过 GitHub Secrets 注入环境变量隐藏。
     zone = ''
     zone_env = domain_config.get('zone_env', '').strip()
     if zone_env:
         zone = os.getenv(zone_env, '').strip()
-    if not zone:
-        zone = os.getenv(f'ZONE_{provider_id.upper()}', '').strip()
     if not zone:
         zone = domain_config.get('zone', '').strip()
     subdomains = domain_config.get('subdomains', []) or []
@@ -152,8 +148,7 @@ def process_domain(module, provider_id, credentials, domain_config, ip_list):
         print('  跳过：subdomains 为空')
         return
     if not zone:
-        print(f'  跳过：zone 为空（未设置 {zone_env or f"ZONE_{provider_id.upper()}"} 环境变量，'
-              f'config.yml 也未填 zone）')
+        print(f'  跳过：zone 为空（未设置 {zone_env or "zone"} 环境变量，config.yml 也未填 zone）')
         return
 
     max_ips = domain_config.get('max_ips', MAX_IPS_DEFAULT)

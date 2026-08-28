@@ -33,12 +33,11 @@ providers:
     # endpoint: ...            # (可选) 自定义端点，指定则优先于 region
 
 # 要更新的域名
-# zone 隐藏方式：域名段 zone 留空，真实域名从环境变量读取，优先级：
-#   域名段 zone_env 指定的变量 > 环境变量 ZONE_<厂商ID大写> > 域名段 zone 明文
-#   如 Cloudflare 用 ZONE_CLOUDFLARE，华为云用 ZONE_HUAWEICLOUD（均从 GitHub Secrets 注入）
+# zone 隐藏方式：域名段 zone 留空，真实域名从域名段 zone_env 指定的环境变量读取。
 domains:
   - provider: cloudflare
-    zone: ""                       # 留空，真实域名从 ZONE_CLOUDFLARE 读取（隐藏于 GitHub Secrets）
+    zone: ""                       # 留空，真实域名从 CF_ZONE 读取（隐藏于 GitHub Secrets）
+    zone_env: CF_ZONE              # 域名段 zone_env 指定的环境变量优先于 zone 明文
     subdomains:
       - bestcf
      # - api
