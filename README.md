@@ -77,10 +77,10 @@
 
 ## config.yml 配置说明
 
-### 结构总览
+### 完整示例
 
 ```yaml
-ip_source: 全局默认优选IP源          # 每行一个 IP 的文本网址（必须）
+ip_source: https://raw.githubusercontent.com/用户名/仓库名/refs/heads/main/ip.txt  # 全局默认优选IP源（每行一个 IP）
 
 providers:                          # 各厂商非凭据可选默认值（凭据用 Secrets 注入，不写在这里）
   cloudflare: {}                    # 凭据用 Secrets 的 CF_API_TOKEN 注入
@@ -89,7 +89,7 @@ providers:                          # 各厂商非凭据可选默认值（凭据
 
 domains:                            # 要更新的域名列表
   - provider: cloudflare            # 用哪个厂商
-    zone_env: CF_ZONE               # 真实域名从 Secret CF_ZONE 读取（不在仓库写明文）
+    zone_env: CF_ZONE               # 真实域名从 Secret CF_ZONE 读取（仓库不写明文）
     subdomains:                     # 要解析的子域名前缀
       - bestcf
       - api
@@ -102,6 +102,8 @@ domains:                            # 要更新的域名列表
     line: 电信,联通,移动             # (可选) 解析线路，多线路用逗号分隔
     subdomains:
       - cdn
+      - download
+    max_ips: 3
 ```
 
 ### 字段说明
@@ -129,43 +131,6 @@ domains:                            # 要更新的域名列表
 - `HUAWEICLOUD_SDK_AK` / `HUAWEICLOUD_SDK_SK`：华为云 Access Key ID / Secret Access Key
 
 未注入对应环境变量的厂商会被自动跳过。
-
-### 域名隐藏说明
-
-域名段不再写 `zone`/`project_id` 明文，改用 `zone_env`/`project_id_env` 指定环境变量名，该变量的真实值从 GitHub Secrets 注入，因此**公开仓库里看不到也不含任何真实域名/项目 ID**。每个域名段可各自指定不同的变量名，互不影响。
-
-本地开发想临时验证时，也可在域名段临时写 `zone`/`project_id` 明文（优先级低于环境变量），推送到公开仓库前删掉即可。
-
-### 完整示例
-
-```yaml
-# 全局默认 IP 源：你仓库里 ip.txt 的 Raw 链接
-# 获取方法：GitHub 打开 ip.txt → 点右上角 Raw → 复制浏览器地址栏链接
-ip_source: https://raw.githubusercontent.com/用户名/仓库名/refs/heads/main/ip.txt
-
-providers:
-  cloudflare: {}           # 凭据用 Secrets 的 CF_API_TOKEN 注入
-  huaweicloud:             # 凭据用 Secrets 的 HUAWEICLOUD_SDK_AK / _SK 注入
-    # region: ap-southeast-1
-
-domains:
-  - provider: cloudflare
-    zone_env: CF_ZONE               # 真实域名从 Secret CF_ZONE 读取
-    subdomains:
-      - bestcf
-      - api
-    max_ips: 5
-
-  - provider: huaweicloud
-    zone_env: HUAWEI_ZONE           # 真实域名从 Secret HUAWEI_ZONE 读取
-    region: ap-southeast-1
-    project_id_env: HUAWEI_ZONE_PROJECT   # 项目 ID 从 Secret 读取
-    line: 电信,联通,移动
-    subdomains:
-      - cdn
-      - download
-    max_ips: 3
-```
 
 ### 常见配置错误
 
