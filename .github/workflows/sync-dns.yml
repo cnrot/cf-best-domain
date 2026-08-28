@@ -29,7 +29,10 @@ jobs:
     - name: Run update script
       env:
         CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        ZONE_CLOUDFLARE: ${{ secrets.ZONE_CLOUDFLARE }}   # 隐藏的 CF 托管域名
         HUAWEICLOUD_SDK_AK: ${{ secrets.HUAWEICLOUD_SDK_AK }}
         HUAWEICLOUD_SDK_SK: ${{ secrets.HUAWEICLOUD_SDK_SK }}
+        ZONE_HUAWEICLOUD: ${{ secrets.ZONE_HUAWEICLOUD }} # 隐藏的华为云托管域名
+        HUAWEICLOUD_SDK_PROJECT_ID: ${{ secrets.HUAWEICLOUD_SDK_PROJECT_ID }}  # 隐藏的华为云项目ID
       run: |
         python bestdomain.py

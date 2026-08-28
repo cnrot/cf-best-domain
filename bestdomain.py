@@ -13,6 +13,7 @@
 主框架会自动在有凭据配置时调用、无配置时跳过。
 """
 import importlib
+import json
 import os
 import traceback
 
@@ -134,13 +135,25 @@ def process_domain(module, provider_id, credentials, domain_config, ip_list):
             print('  跳过：域名级参数缺失（如 project_id）')
             return
 
-    zone = domain_config.get('zone', '').strip()
-    subdomains = domain_config.get('subdomains', []) or []
+    # zone 读取优先级（隐藏敏感域名，避免公开仓库暴露）：
+    #   1) 域名段 zone_env 指定的环境变量
+    #   2) 环境变量 ZONE_<厂商ID大写>（如 ZONE_CLOUDFLARE、ZONE_HUAWEICLOUD）
+    #   3) config.yml 域名段 zone 明文（本地开发/无敏感时用）
+    zone = ''
+    zone_env = domain_config.get('zone_env', '').strip()
+    if zone_env:
+        zone = os.getenv(zone_env, '').strip()
     if not zone:
-        print('  跳过：zone 为空')
-        return
+        zone = os.getenv(f'ZONE_{provider_id.upper()}', '').strip()
+    if not zone:
+        zone = domain_config.get('zone', '').strip()
+    subdomains = domain_config.get('subdomains', []) or []
     if not subdomains:
         print('  跳过：subdomains 为空')
+        return
+    if not zone:
+        print(f'  跳过：zone 为空（未设置 {zone_env or f"ZONE_{provider_id.upper()}"} 环境变量，'
+              f'config.yml 也未填 zone）')
         return
 
     max_ips = domain_config.get('max_ips', MAX_IPS_DEFAULT)
