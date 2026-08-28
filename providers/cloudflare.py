@@ -105,8 +105,16 @@ def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, ma
     规则：先删除不在本次 IP 列表里的旧记录（数量不足时自动清多余），再补缺失的新 IP。
     """
     api_token = credentials['api_token']
-    max_ips = max_ips or len(ip_list) if max_ips else len(ip_list)
-    target_ips = ip_list[:max_ips]
+    # ip_list 为 [(ip, line), ...]；CF 无线路概念，去线路后按唯一 IP 取前 max_ips 个
+    unique_ips = []
+    seen = set()
+    for item in ip_list:
+        ip = item[0] if isinstance(item, (tuple, list)) else item
+        if ip not in seen:
+            seen.add(ip)
+            unique_ips.append(ip)
+    max_ips = max_ips or len(unique_ips) if max_ips else len(unique_ips)
+    target_ips = unique_ips[:max_ips]
     target_ip_set = set(target_ips)
 
     print(f"  目标 IP {len(target_ips)} 个（来自 ip.txt 前 {max_ips} 个）")

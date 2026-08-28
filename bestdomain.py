@@ -40,10 +40,27 @@ def load_config():
 
 
 def get_ip_list(url):
+    """抓取 IP 源，返回 [(ip, line), ...]。
+
+    支持两种行格式：
+      - `IP#线路`   带运营商线路标签（电信/联通/移动/ANY）
+      - `IP`        无线路标签，按 ANY 处理
+    """
     response = requests.get(url)
     response.raise_for_status()
-    ips = response.text.strip().split('\n')
-    return [ip.strip() for ip in ips if ip.strip()]
+    result = []
+    for raw in response.text.strip().split('\n'):
+        raw = raw.strip()
+        if not raw:
+            continue
+        if '#' in raw:
+            ip, _, line = raw.partition('#')
+            ip, line = ip.strip(), line.strip() or 'ANY'
+        else:
+            ip, line = raw, 'ANY'
+        if ip:
+            result.append((ip, line))
+    return result
 
 
 def load_provider_module(provider_name):

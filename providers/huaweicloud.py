@@ -80,30 +80,63 @@ def lookup_zone(credentials, target_domain):
 
 
 def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, max_ips):
-    """主框架调用：把优选 IP（前 max_ips 个）同步到该域名下所有子域名。
+    """主框架调用：把优选 IP 同步到该域名下所有子域名，支持多线路分组。
 
-    策略（始终走 with_line 接口，支持解析线路）：
-    - 目标集合 = 每个子域名、用配置的 line（默认 default_view）创建/更新一个记录集
-    - records 值一致 → Keep；不一致 → 先 update_record_set(PUT) 改写；失败 → 删除重建
-    - 仅清理本工具管理的 (name,line) 记录，绝不碰用户其它记录
+    line 配置（credentials['line']）可为：
+      - 单值字符串  如 'default_view' 或 '电信'           → 所有目标 IP 进这一条线路
+      - 逗号分隔    如 '电信,联通,移动'                   → 每条线路一个记录集
+      - 列表        如 ['电信','联通','移动']              → 同上
+    多线路分组时：每条线路取该线路的优选 IP，不足 max_ips 个用 ANY 通用 IP 补足。
+    ip.txt 行格式为 `IP#线路`，无线路标签的按 ANY 处理。
+
+    策略（始终走 with_line 接口）：
+    - (name, line) 记录集 records 一致 → Keep；不一致 → PUT 改写；失败 → 删除重建
+    - 仅清理本工具管理的 (name, line) 记录，绝不碰用户其它记录
     """
     client = _build_client(credentials)
-    max_ips = max_ips or len(ip_list)
-    target_ips = ip_list[:max_ips]
     zone_dot = _note_domain(zone_name)
     ttl = int(credentials.get('ttl') or DEFAULT_TTL)
-    line = credentials.get('line') or DEFAULT_LINE
 
-    print(f"  目标 IP {len(target_ips)} 个（ip.txt 前 {max_ips} 个）；TTL={ttl}s；"
-          f"线路={line}；region={credentials.get('region') or DEFAULT_REGION}")
+    # 解析目标线路列表（单值 / 逗号分隔 / 列表）
+    line_cfg = credentials.get('line') or DEFAULT_LINE
+    if isinstance(line_cfg, (list, tuple)):
+        target_lines = [str(x).strip() for x in line_cfg if str(x).strip()]
+    else:
+        target_lines = [x.strip() for x in str(line_cfg).split(',') if x.strip()]
+    if not target_lines:
+        target_lines = [DEFAULT_LINE]
 
-    # 期望记录：name(带点) -> 子域名前缀（每个子域名在配置的 line 下一条记录集）
+    # ip_list 为 [(ip, line), ...]，按线路标签分组
+    line_ips = {}
+    for item in ip_list:
+        ip, tag = (item[0], item[1]) if isinstance(item, (tuple, list)) else (item, 'ANY')
+        line_ips.setdefault(tag, []).append(ip)
+    any_ips = line_ips.get('ANY', [])
+
+    # 每条目标线路：本线路优选 IP + 不足用 ANY 补足，去重后截 max_ips
+    max_ips = max_ips or max((len(v) for v in line_ips.values()), default=1)
+    plan = {}
+    for ln in target_lines:
+        ips, seen = [], set()
+        for ip in list(line_ips.get(ln, [])) + list(any_ips):
+            if ip not in seen:
+                seen.add(ip)
+                ips.append(ip)
+        plan[ln] = ips[:max_ips]
+
+    print(f"  目标线路 {target_lines}；每线路上限 {max_ips} IP；TTL={ttl}s；"
+          f"region={credentials.get('region') or DEFAULT_REGION}")
+    for ln in target_lines:
+        print(f"    {ln}: {len(plan[ln])} 个 IP")
+
+    # 期望记录：(name, line) -> 目标 IP 列表
     expected = {}
     for sub in subdomains:
         name = _note_domain(zone_name if sub == '@' else f'{sub}.{zone_name}')
-        expected[name] = sub
+        for ln in target_lines:
+            expected[(name, ln)] = plan[ln]
 
-    # 读取带 line 的全部记录集，按 (name, line) 精确匹配
+    # 读取带 line 的全部记录集
     try:
         recordsets = client.list_recordsets_with_line(zone_id)
     except Exception as e:
@@ -112,35 +145,32 @@ def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, ma
     a_sets = [r for r in recordsets
               if r.type == 'A' and _note_domain(r.name).endswith(zone_dot)]
 
-    # 本工具管理的名字集合（只在这些名字的配置线路上做增删改）
-    managed_names = set(expected.keys())
+    managed_names = {name for (name, _) in expected}
+    expected_keys = set(expected.keys())
 
-    def _find(name):
+    def _find(name, ln):
         """在本域名 A 记录里按 (name, line) 精确查找。"""
         for r in a_sets:
             if _note_domain(r.name) == name:
                 r_line = getattr(r, 'line', None) or 'default_view'
-                if r_line == line:
+                if r_line == ln:
                     return r
         return None
 
-    # 1) 更新/创建每个期望子域名
-    for record_name, sub in sorted(expected.items()):
-        existing = _find(record_name)
+    # 1) 更新/创建每个 (name, line)
+    for (record_name, ln), target in sorted(expected.items()):
+        existing = _find(record_name, ln)
         cur = existing.records if existing else []
-        if not isinstance(cur, list):
-            cur = [str(cur)]
-        else:
-            cur = [str(x) for x in cur]
+        cur = [str(x) for x in cur] if isinstance(cur, list) else [str(cur)]
 
-        if set(cur) == set(target_ips):
-            print(f"    Keep {record_name}（记录一致）")
+        if set(cur) == set(target):
+            print(f"    Keep {record_name} [{ln}]（记录一致）")
             continue
 
         if existing:
             try:
-                client.update_recordset(zone_id, existing.id, record_name, 'A', target_ips, ttl)
-                print(f"    Update {record_name}: {', '.join(target_ips)}")
+                client.update_recordset(zone_id, existing.id, record_name, 'A', target, ttl)
+                print(f"    Update {record_name} [{ln}]: {', '.join(target)}")
                 continue
             except Exception as e:
                 print(f"    Update 失败({e})，尝试删除重建")
@@ -151,19 +181,21 @@ def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, ma
                 time.sleep(1)
 
         try:
-            client.create_recordset_with_line(zone_id, record_name, 'A', target_ips, ttl, line)
-            print(f"    Create {record_name} {line}: {', '.join(target_ips)}")
+            client.create_recordset_with_line(zone_id, record_name, 'A', target, ttl, ln)
+            print(f"    Create {record_name} [{ln}]: {', '.join(target)}")
         except Exception as e:
             print(f"    创建失败: {e}")
 
-    # 2) 清理：仅删除【本工具管理的 name 且对应 line】里已不再需要的记录，绝不碰其它记录
-    for name in managed_names:
-        if name in expected:
-            continue  # 期望仍存在，上面已处理
-        existing = _find(name)
-        if existing:
+    # 2) 清理：本工具管理的 name 上、(name, line) 已不在期望里的记录
+    #    （子域名被移除、或线路缩减时触发），绝不碰用户其它子域名/线路的记录
+    for r in a_sets:
+        rname = _note_domain(r.name)
+        if rname not in managed_names:
+            continue
+        rline = getattr(r, 'line', None) or 'default_view'
+        if (rname, rline) not in expected_keys:
             try:
-                client.delete_recordset(zone_id, existing.id)
-                print(f"    清理不再需要的记录 {existing.name}")
+                client.delete_recordset(zone_id, r.id)
+                print(f"    清理不再需要的记录 {r.name} [{rline}]")
             except Exception as e:
                 print(f"    清理失败: {e}")

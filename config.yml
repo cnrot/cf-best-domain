@@ -16,7 +16,14 @@
 # =====================================================
 
 # 全局默认 IP 源（collect_ips.py 采集生成的 ip.txt 的 Raw 链接）
+# ip.txt 行格式：`IP#线路`，线路标签为 电信/联通/移动/ANY（无线路信息的通用 IP 标 ANY）。
+# 华为云按线路分组使用；Cloudflare 忽略线路标签，按唯一 IP 同步。
 ip_source: https://raw.githubusercontent.com/cnrot/cf-best-domain/refs/heads/main/ip.txt
+
+# 各云厂商段。凭据不写在这里，一律用 GitHub Secrets 注入环境变量：
+#   Cloudflare    : CF_API_TOKEN
+#   华为云国际版   : HUAWEICLOUD_SDK_AK / HUAWEICLOUD_SDK_SK
+# 这里只放厂商级「非凭据」可选默认值（如 region/endpoint），域名段也可单独覆盖。
 providers:
   cloudflare: {}          # 凭据用环境变量 CF_API_TOKEN 注入，此处无需填任何密钥
 
@@ -39,7 +46,8 @@ domains:
     zone: example.com
     region: ap-southeast-1        # 华为云区域（如香港 ap-southeast-1）
     project_id: 你的项目ID        # 该区域的项目ID（必填）
-    line: default_view            # (可选) 解析线路，默认 default_view；可按需改成 电信/联通/移动 等
+    line: 电信,联通,移动           # (可选) 解析线路：单值如 default_view，或多线路如 电信,联通,移动
+                                  #       多线路时每条线路一个记录集，放对应运营商优选 IP（不足用通用 IP 补足）
     subdomains:
       - bestcf
       - api
