@@ -86,8 +86,8 @@ def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, ma
       - 单值字符串  如 'default_view' 或 '电信'           → 所有目标 IP 进这一条线路
       - 逗号分隔    如 '电信,联通,移动'                   → 每条线路一个记录集
       - 列表        如 ['电信','联通','移动']              → 同上
-    多线路分组时：每条线路取该线路的优选 IP，不足 max_ips 个用 ANY 通用 IP 补足。
-    ip.txt 行格式为 `IP#线路`，无线路标签的按 ANY 处理。
+    多线路分组时：每条线路取该线路的优选 IP（按延迟升序），不足 max_ips 个用 ANY 通用 IP 补足。
+    ip.txt 行格式为 `IP#线路#延迟`，无延迟的排在该线路最后。
 
     策略（始终走 with_line 接口）：
     - (name, line) 记录集 records 一致 → Keep；不一致 → PUT 改写；失败 → 删除重建
@@ -106,19 +106,25 @@ def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, ma
     if not target_lines:
         target_lines = [DEFAULT_LINE]
 
-    # ip_list 为 [(ip, line), ...]，按线路标签分组
+    # ip_list 为 [(ip, line, latency), ...]，按线路标签分组；组内按延迟升序（无延迟排后）
     line_ips = {}
     for item in ip_list:
-        ip, tag = (item[0], item[1]) if isinstance(item, (tuple, list)) else (item, 'ANY')
-        line_ips.setdefault(tag, []).append(ip)
-    any_ips = line_ips.get('ANY', [])
+        if isinstance(item, (tuple, list)):
+            ip, tag = item[0], item[1]
+            lat = item[2] if len(item) > 2 else None
+        else:
+            ip, tag, lat = item, 'ANY', None
+        line_ips.setdefault(tag, []).append((ip, lat if lat is not None else float('inf')))
+    for tag in line_ips:
+        line_ips[tag].sort(key=lambda x: (x[1], x[0]))
+    any_ips = [ip for ip, _ in line_ips.get('ANY', [])]
 
-    # 每条目标线路：本线路优选 IP + 不足用 ANY 补足，去重后截 max_ips
+    # 每条目标线路：本线路优选 IP（延迟升序）+ 不足用 ANY 补足，去重后截 max_ips
     max_ips = max_ips or max((len(v) for v in line_ips.values()), default=1)
     plan = {}
     for ln in target_lines:
         ips, seen = [], set()
-        for ip in list(line_ips.get(ln, [])) + list(any_ips):
+        for ip, _ in list(line_ips.get(ln, [])) + list(line_ips.get('ANY', [])):
             if ip not in seen:
                 seen.add(ip)
                 ips.append(ip)

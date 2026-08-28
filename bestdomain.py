@@ -40,11 +40,13 @@ def load_config():
 
 
 def get_ip_list(url):
-    """抓取 IP 源，返回 [(ip, line), ...]。
+    """抓取 IP 源，返回 [(ip, line, latency), ...]。
 
-    支持两种行格式：
-      - `IP#线路`   带运营商线路标签（电信/联通/移动/ANY）
-      - `IP`        无线路标签，按 ANY 处理
+    支持行格式：
+      - `IP#线路#延迟`  带运营商线路 + 延迟(ms，可为空)
+      - `IP#线路`       带线路，无延迟
+      - `IP`            无线路无延迟，按 ANY 处理
+    文件内已按 (线路, 延迟升序) 排序，调用方可直接取前 N 个作为优选。
     """
     response = requests.get(url)
     response.raise_for_status()
@@ -53,13 +55,17 @@ def get_ip_list(url):
         raw = raw.strip()
         if not raw:
             continue
-        if '#' in raw:
-            ip, _, line = raw.partition('#')
-            ip, line = ip.strip(), line.strip() or 'ANY'
-        else:
-            ip, line = raw, 'ANY'
+        parts = raw.split('#')
+        ip = parts[0].strip()
+        line = parts[1].strip() if len(parts) > 1 and parts[1].strip() else 'ANY'
+        latency = None
+        if len(parts) > 2 and parts[2].strip():
+            try:
+                latency = float(parts[2].strip())
+            except ValueError:
+                latency = None
         if ip:
-            result.append((ip, line))
+            result.append((ip, line, latency))
     return result
 
 

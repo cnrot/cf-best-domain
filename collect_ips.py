@@ -12,9 +12,10 @@ headers = {
 # 目标URL列表
 # 已移除 https://stock.hostmonit.com/CloudFlareYes（站点转型为 VPS 监控，CF 优选 IP 业务下线）。
 # https://cf.090227.xyz 已改为前端 JS 渲染，但其后端纯文本接口可直连：
-#   https://addressesapi.090227.xyz/CloudFlareYes  格式为 `IP#运营商线路`
+#   https://addressesapi.090227.xyz/CloudFlareYes  格式为 `IP#运营商线路`（无延迟，但顺序即优选序）
+# ip.164746.xyz 改抓首页表格（含延迟），原 ipTop10.html 仅 1 个 IP 且无延迟。
 urls = [
-    'https://ip.164746.xyz/ipTop10.html',
+    'https://ip.164746.xyz/',
     'https://addressesapi.090227.xyz/CloudFlareYes',
     'https://api.uouin.com/cloudflare.html',
     'https://www.wetest.vip/page/cloudflare/address_v4.html',
@@ -40,20 +41,57 @@ def normalize_line(tag):
     for prefix, name in LINE_PREFIX_MAP.items():
         if up.startswith(prefix):
             return name
+    # 直接命中中文线路名
+    for name in ('电信', '联通', '移动'):
+        if name in tag:
+            return name
+    # "多线"/"通用"等不区分运营商的，归为 ANY
+    if any(k in tag for k in ('多线', '通用', '全部', '默认')):
+        return 'ANY'
     return 'ANY' if tag in ('', 'ANY') else tag
 
 
-def add_ip(ip, line_tag):
-    """记录 (IP, 线路)。同一 IP 可属于多条线路（如 090227 的三网通用优选 IP）。"""
-    all_ips.add((ip, normalize_line(line_tag)))
+def parse_latency(text):
+    """从文本中提取延迟数值（毫秒，float）。无法解析返回 None。
+
+    兼容：`136.85ms`、`132 毫秒`、`69.56`、`<1` 等。
+    """
+    if not text:
+        return None
+    s = text.strip()
+    # 取第一个 数字(.数字) 片段
+    m = re.search(r'(\d+(?:\.\d+)?)', s)
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def add_ip(ip, line_tag, latency=None):
+    """记录 (IP, 线路, 延迟)。
+
+    同一 IP 可属于多条线路（如 090227 的三网通用优选 IP）。
+    同一 (IP, 线路) 以更小的延迟覆盖（取最优延迟）。
+    """
+    line = normalize_line(line_tag)
+    key = (ip, line)
+    existing = all_ips.get(key)
+    if existing is None:
+        all_ips[key] = latency
+    else:
+        # 已存在：取更小延迟（None 视为无穷大，不覆盖有值延迟）
+        if latency is not None and (existing is None or latency < existing):
+            all_ips[key] = latency
 
 
 # 检查ip.txt文件是否存在,如果存在则删除它
 if os.path.exists('ip.txt'):
     os.remove('ip.txt')
 
-# 存储 (IP, 线路) 对（去重；同一 IP 可有多条线路）
-all_ips = set()
+# 存储 (IP, 线路) -> 延迟(ms 或 None)
+all_ips = {}
 
 for url in urls:
     try:
@@ -66,22 +104,33 @@ for url in urls:
             print(f"  HTTP状态码: {response.status_code}, 跳过")
             continue
 
-        # 使用BeautifulSoup解析HTML
-        soup = BeautifulSoup(response.text, 'html.parser')
+        text = response.text
 
-        # 根据网站的不同结构找到包含IP地址的元素
-        # 注意：cf.090227.xyz 与 stock.hostmonit.com 已改为前端 JS 渲染，
-        # requests 拿不到 IP，已从 urls 中移除。
-        if url == 'https://ip.164746.xyz/ipTop10.html':
-            # 纯文本，逗号分隔，无线路信息
-            for ip in re.findall(ip_pattern, response.text):
-                add_ip(ip, 'ANY')
-            print(f"  从{url}找到{len(re.findall(ip_pattern, response.text))}个IP")
-            continue
-        elif url == 'https://addressesapi.090227.xyz/CloudFlareYes':
-            # 纯文本，格式为 `IP#运营商线路`（如 104.17.245.114#CT-Default）
+        if url == 'https://ip.164746.xyz/':
+            # 首页表格：表头 [IP地址, 已发送, 已接收, 丢包率, 平均延迟, 下载速度, 测速时间]
+            # 无线路列 → ANY；IP 在 <a> 里，延迟在第5个 td
+            soup = BeautifulSoup(text, 'html.parser')
             count = 0
-            for raw in response.text.splitlines():
+            for tr in soup.find_all('tr'):
+                tds = tr.find_all('td')
+                if len(tds) < 5:
+                    continue
+                a = tds[0].find('a')
+                ip = a.get_text(strip=True) if a else tds[0].get_text(strip=True)
+                if not re.fullmatch(ip_pattern, ip):
+                    continue
+                latency = parse_latency(tds[4].get_text(strip=True))
+                add_ip(ip, 'ANY', latency)
+                count += 1
+            print(f"  从{url}找到{count}个IP")
+            time.sleep(1)
+            continue
+
+        if url == 'https://addressesapi.090227.xyz/CloudFlareYes':
+            # 纯文本，格式 `IP#运营商线路`（如 104.17.245.114#CT-Default）
+            # 无延迟数据，但行顺序即优选序——用行号作为隐式延迟，保证排序时靠前
+            count = 0
+            for idx, raw in enumerate(text.splitlines()):
                 raw = raw.strip()
                 if not raw:
                     continue
@@ -91,41 +140,69 @@ for url in urls:
                     ip, tag = raw, 'ANY'
                 ip = ip.strip()
                 if re.fullmatch(ip_pattern, ip):
-                    add_ip(ip, tag)
+                    # 用行号当延迟：越靠前越优（行号小=延迟小）
+                    add_ip(ip, tag, float(idx))
                     count += 1
             print(f"  从{url}找到{count}个IP")
             continue
-        elif url == 'https://api.uouin.com/cloudflare.html':
-            elements = soup.find_all('td')
-        elif url == 'https://www.wetest.vip/page/cloudflare/address_v4.html':
-            elements = soup.find_all('td', attrs={'data-label': '优选地址'})
-        else:
-            elements = soup.find_all('li')
 
-        # 遍历所有元素,查找IP地址（这些站点无线路信息，统一标 ANY）
-        ip_count = 0
-        for element in elements:
-            element_text = element.get_text()
-            ip_matches = re.findall(ip_pattern, element_text)
+        if url == 'https://api.uouin.com/cloudflare.html':
+            # 数据行 td: [线路, IP, 丢包, 延迟, 速度, 带宽, Colo, 时间]
+            # （表头在 thead 多一个 # 列，数据行 tbody 无 # 列）
+            # 线路=td[0], IP=td[1], 延迟=td[3]（如 136.85ms）
+            soup = BeautifulSoup(text, 'html.parser')
+            count = 0
+            for tr in soup.find_all('tr'):
+                tds = tr.find_all('td')
+                if len(tds) < 4:
+                    continue
+                line = tds[0].get_text(strip=True)
+                ip = tds[1].get_text(strip=True)
+                if not re.fullmatch(ip_pattern, ip):
+                    continue
+                latency = parse_latency(tds[3].get_text(strip=True))
+                add_ip(ip, line, latency)
+                count += 1
+            print(f"  从{url}找到{count}个IP")
+            time.sleep(1)
+            continue
 
-            # 如果找到IP地址,则添加到集合
-            for ip in ip_matches:
-                add_ip(ip, 'ANY')
-                ip_count += 1
-
-        print(f"  从{url}找到{ip_count}个IP")
-        time.sleep(1)  # 避免请求过快
+        if url == 'https://www.wetest.vip/page/cloudflare/address_v4.html':
+            # 数据行 td: [线路, IP, 网络带宽, 峰值速度, 往返延迟, 数据中心, 更新时间]
+            # 线路=td[0], IP=td[1], 延迟=td[4]（如 121 毫秒）
+            soup = BeautifulSoup(text, 'html.parser')
+            count = 0
+            for tr in soup.find_all('tr'):
+                tds = tr.find_all('td')
+                if len(tds) < 5:
+                    continue
+                line = tds[0].get_text(strip=True)
+                ip = tds[1].get_text(strip=True)
+                if not re.fullmatch(ip_pattern, ip):
+                    continue
+                latency = parse_latency(tds[4].get_text(strip=True))
+                add_ip(ip, line, latency)
+                count += 1
+            print(f"  从{url}找到{count}个IP")
+            time.sleep(1)
+            continue
 
     except requests.exceptions.Timeout:
         print(f"处理 {url} 时超时，跳过")
     except Exception as e:
         print(f"处理 {url} 时出错：{e}")
 
-# 将去重后的 IP 写入文件，格式 `IP#线路`，按 (线路, IP) 排序便于阅读
-with open('ip.txt', 'w', encoding='utf-8') as file:
-    for ip, line in sorted(all_ips, key=lambda x: (x[1], x[0])):
-        file.write(f'{ip}#{line}\n')
+# 写入 ip.txt，格式 `IP#线路#延迟`，按 (线路, 延迟升序, IP) 排序
+# 延迟为 None 时写空，排序时 None 排在该线路最后
+def sort_key(item):
+    (ip, line), latency = item
+    return (line, latency if latency is not None else float('inf'), ip)
 
-# 唯一 IP 数（按 IP 去重统计，便于日志可读）
-unique_ip_count = len({ip for ip, _ in all_ips})
+
+with open('ip.txt', 'w', encoding='utf-8') as file:
+    for (ip, line), latency in sorted(all_ips.items(), key=sort_key):
+        lat_str = f'{latency:g}' if latency is not None else ''
+        file.write(f'{ip}#{line}#{lat_str}\n')
+
+unique_ip_count = len({ip for (ip, _) in all_ips.keys()})
 print(f'总共找到 {unique_ip_count} 个唯一IP（{len(all_ips)} 条线路记录），已保存到 ip.txt 文件中。')

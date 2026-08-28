@@ -111,11 +111,17 @@ def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, ma
     规则：先删除不在本次 IP 列表里的旧记录（数量不足时自动清多余），再补缺失的新 IP。
     """
     api_token = credentials['api_token']
-    # ip_list 为 [(ip, line), ...]；CF 无线路概念，去线路后按唯一 IP 取前 max_ips 个
+    # ip_list 为 [(ip, line, latency), ...]；CF 无线路概念，按延迟升序取唯一 IP 前 max_ips 个
+    # ip.txt 已按 (线路, 延迟) 排序，跨线路合并时再按延迟升序、无延迟者排后
+    items = []
+    for it in ip_list:
+        ip = it[0] if isinstance(it, (tuple, list)) else it
+        lat = it[2] if (isinstance(it, (tuple, list)) and len(it) > 2) else None
+        items.append((ip, lat if lat is not None else float('inf')))
+    items.sort(key=lambda x: (x[1], x[0]))
     unique_ips = []
     seen = set()
-    for item in ip_list:
-        ip = item[0] if isinstance(item, (tuple, list)) else item
+    for ip, _ in items:
         if ip not in seen:
             seen.add(ip)
             unique_ips.append(ip)
@@ -123,7 +129,7 @@ def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, ma
     target_ips = unique_ips[:max_ips]
     target_ip_set = set(target_ips)
 
-    print(f"  目标 IP {len(target_ips)} 个（来自 ip.txt 前 {max_ips} 个）")
+    print(f"  目标 IP {len(target_ips)} 个（按延迟升序取前 {max_ips} 个）")
 
     for subdomain in subdomains:
         record_name = zone_name if subdomain == '@' else f'{subdomain}.{zone_name}'

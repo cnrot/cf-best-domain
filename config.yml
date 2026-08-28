@@ -16,8 +16,8 @@
 # =====================================================
 
 # 全局默认 IP 源（collect_ips.py 采集生成的 ip.txt 的 Raw 链接）
-# ip.txt 行格式：`IP#线路`，线路标签为 电信/联通/移动/ANY（无线路信息的通用 IP 标 ANY）。
-# 华为云按线路分组使用；Cloudflare 忽略线路标签，按唯一 IP 同步。
+# ip.txt 行格式：`IP#线路#延迟`，线路为 电信/联通/移动/ANY，延迟单位 ms（无延迟留空）。
+# 文件内按 (线路, 延迟升序) 排序；更新 DNS 时各线路/CF 均优先取延迟最低的 IP。
 ip_source: https://raw.githubusercontent.com/cnrot/cf-best-domain/refs/heads/main/ip.txt
 
 # 各云厂商段。凭据不写在这里，一律用 GitHub Secrets 注入环境变量：
