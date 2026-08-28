@@ -99,6 +99,12 @@ def delete_dns_record(api_token, zone_id, record_id, record_ip):
 
 # ---- 主框架契约函数 ----
 
+def lookup_zone(credentials, target_domain):
+    """主框架契约：定位域名在 CF 账号下的 zone，返回 (zone_id, zone_name)。"""
+    api_token = credentials['api_token']
+    return get_zone_id_by_domain(api_token, target_domain)
+
+
 def update_zone_records(credentials, zone_id, zone_name, subdomains, ip_list, max_ips):
     """主框架调用：为该域名下所有子域名同步 A 记录到 ip_list（前 max_ips 个）。
 
