@@ -1,6 +1,6 @@
 # cf-best-domain
 
-定时抓取 Cloudflare 优选 IP，并把它们自动同步到 DNS 解析记录，让 `bestcf.example.com` 这类子域名始终指向延迟最低的 IP。
+定时抓取 Cloudflare 优选 IP，并把它们自动同步到 DNS 解析记录，让 `bestcf.<你的域名>` 这类子域名始终指向延迟最低的 IP。
 
 ---
 
@@ -58,10 +58,10 @@
 
    | Secret 名 | 说明 |
    |-----------|------|
-   | `CF_API_TOKEN` | Cloudflare 令牌（需 `Zone:Read` + `DNS:Edit` 权限） |
-   | `CF_ZONE` | 你托管在 Cloudflare 的顶级域名（隐藏真实域名，配 `zone_env: CF_ZONE`） |
-   | `HUAWEI_ZONE` | 华为云托管域名（配 `zone_env: HUAWEI_ZONE`，用华为云时） |
-   | `HUAWEI_ZONE_PROJECT` | 华为云项目 ID（配 `project_id_env`，用华为云时） |
+   | `CF_API_TOKEN` | Cloudflare 令牌 |
+   | `CF_ZONE` | 你托管在 Cloudflare 的顶级域名 |
+   | `HUAWEI_ZONE` | 托管在华为云的域名 |
+   | `HUAWEI_ZONE_PROJECT` | 华为云项目 ID |
    | `HUAWEICLOUD_SDK_AK` | 华为云 Access Key ID |
    | `HUAWEICLOUD_SDK_SK` | 华为云 Secret Access Key |
 
@@ -89,17 +89,16 @@ providers:                          # 各厂商非凭据可选默认值（凭据
 
 domains:                            # 要更新的域名列表
   - provider: cloudflare            # 用哪个厂商
-    zone: example.com               # 该厂商下绑定的站点域名
+    zone_env: CF_ZONE               # 真实域名从 Secret CF_ZONE 读取（不在仓库写明文）
     subdomains:                     # 要解析的子域名前缀
       - bestcf
       - api
     max_ips: 5                      # (可选) 每个子域名最多几个 IP
 
   - provider: huaweicloud           # 区域型厂商示例
-    zone: second.com
-    zone_env: HUAWEI_ZONE           # (可选) 隐藏域名：zone 留空时从此环境变量读取
+    zone_env: HUAWEI_ZONE           # 真实域名从 Secret HUAWEI_ZONE 读取
     region: ap-southeast-1          # 区域 ID（如香港）
-    project_id: 你的项目ID          # 该区域项目 ID（必填）
+    project_id_env: HUAWEI_ZONE_PROJECT   # 项目 ID 从 Secret 读取（必填）
     line: 电信,联通,移动             # (可选) 解析线路，多线路用逗号分隔
     subdomains:
       - cdn
@@ -113,38 +112,29 @@ domains:                            # 要更新的域名列表
 | `providers` | 顶层 | 各厂商非凭据可选默认值段（凭据用环境变量注入，不写在此） |
 | `domains` | 顶层 | 要更新的域名列表 |
 | `provider` | 域名段 | 用哪个厂商（如 `cloudflare`、`huaweicloud`） |
-| `zone` | 域名段 | 该厂商下绑定的**站点域名**（必须与该厂商后台注册的一致） |
-| `zone_env` | 域名段 | (可选) 隐藏域名用：`zone` 留空时，从该环境变量读取真实域名（见下文「隐藏域名」） |
+| `zone_env` | 域名段 | 指定环境变量，真实域名从该变量读取（GitHub Secrets 注入，仓库不写明文域名） |
 | `subdomains` | 域名段 | 要解析的子域名前缀列表；`bestcf` → `bestcf.<zone>` |
 | `max_ips` | 域名段 | (可选) 每个子域名最多解析几个 IP，默认 10，上限 10 |
 | `ip_source` | 域名段 | (可选) 该域名独立 IP 源，省略用全局 `ip_source` |
 | `region` | 域名段 | (区域型厂商必填) 云厂商区域 ID，如华为云 `ap-southeast-1` |
-| `project_id` | 域名段 | (区域型厂商必填) 该项目区域的项目 ID |
+| `project_id_env` | 域名段 | (区域型厂商必填) 指定环境变量，项目 ID 从该变量读取（GitHub Secrets） |
 | `line` | 域名段 | (可选) 解析线路，华为云默认 `default_view`；多线路用逗号分隔，如 `电信,联通,移动` |
 | `endpoint` | 域名段 | (可选) 自定义 API 端点，指定则优先于 `region` |
 
-凭据通过环境变量注入（用于 GitHub Secrets），不在 `config.yml` 写明文：
+真实域名/项目 ID 一律通过环境变量（GitHub Secrets）注入，不在 `config.yml` 写明文：
+- `CF_ZONE`：Cloudflare 托管域名（域名段 `zone_env: CF_ZONE`）
+- `HUAWEI_ZONE`：华为云托管域名（域名段 `zone_env: HUAWEI_ZONE`）
+- `HUAWEI_ZONE_PROJECT`：华为云项目 ID（域名段 `project_id_env: HUAWEI_ZONE_PROJECT`）
 - `CF_API_TOKEN`：Cloudflare 令牌
 - `HUAWEICLOUD_SDK_AK` / `HUAWEICLOUD_SDK_SK`：华为云 Access Key ID / Secret Access Key
 
 未注入对应环境变量的厂商会被自动跳过。
 
-### 隐藏域名
+### 域名隐藏说明
 
-若你的仓库是公开的、不想暴露真实托管域名，可把域名段的 `zone` 留空、配 `zone_env` 指向一个环境变量（该变量从 GitHub Secrets 注入），真实域名只存在 Secret 里：
+域名段不再写 `zone`/`project_id` 明文，改用 `zone_env`/`project_id_env` 指定环境变量名，该变量的真实值从 GitHub Secrets 注入，因此**公开仓库里看不到也不含任何真实域名/项目 ID**。每个域名段可各自指定不同的变量名，互不影响。
 
-```yaml
-domains:
-  - provider: cloudflare
-    zone: ""              # 留空，不写明文
-    zone_env: CF_ZONE     # 真实域名从 Secret CF_ZONE 读取
-    subdomains:
-      - bestcf
-```
-
-- zone 读取优先级：`zone_env` 指定的环境变量 → 域名段 `zone` 明文。
-- 未设置相应 Secret 时自动回退到 `zone` 明文；`zone` 也为空则跳过该域名并提示。
-- 每个域名段可各自指定不同的 `zone_env`（如 `CF_ZONE`、`HUAWEI_ZONE`），互不影响。
+本地开发想临时验证时，也可在域名段临时写 `zone`/`project_id` 明文（优先级低于环境变量），推送到公开仓库前删掉即可。
 
 ### 完整示例
 
@@ -160,17 +150,16 @@ providers:
 
 domains:
   - provider: cloudflare
-    zone: example.com
+    zone_env: CF_ZONE               # 真实域名从 Secret CF_ZONE 读取
     subdomains:
       - bestcf
       - api
     max_ips: 5
 
   - provider: huaweicloud
-    zone: second.com
-    zone_env: HUAWEI_ZONE
+    zone_env: HUAWEI_ZONE           # 真实域名从 Secret HUAWEI_ZONE 读取
     region: ap-southeast-1
-    project_id: ca7f0000xxxxxxxx
+    project_id_env: HUAWEI_ZONE_PROJECT   # 项目 ID 从 Secret 读取
     line: 电信,联通,移动
     subdomains:
       - cdn
@@ -182,11 +171,10 @@ domains:
 
 | ❌ 错误写法 | ✅ 正确写法 |
 |------------|------------|
-| `zone: *.example.com` | `zone: example.com` |
-| `zone: bestcf`（漏了主域名） | `zone: example.com`，把 `bestcf` 写进 `subdomains` |
-| `subdomains` 里写 `bestcf.example.com` | 写前缀 `bestcf` |
-| 域名段设了 `provider: cloudflare` 但没配凭据 | 在 GitHub Secrets 配好 `CF_API_TOKEN` |
-| 华为云域名漏写 `project_id` | 补 `project_id`（否则该域名被跳过并提示） |
+| 域名段写了明文字段但没配对应 Secret | 用 `zone_env`/`project_id_env` 并从 GitHub Secrets 注入，或用明文+不公开仓库 |
+| `subdomains` 里写了完整子域名 `bestcf.<你的域名>` | 只写前缀 `bestcf` |
+| 域名段设了 `provider: cloudflare` 但没配 `CF_API_TOKEN` | 在 GitHub Secrets 配好 `CF_API_TOKEN` |
+| 华为云域名漏配 `project_id_env` 对应 Secret | 配 `HUAWEI_ZONE_PROJECT`（否则该域名被跳过并提示） |
 
 ---
 
