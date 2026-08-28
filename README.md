@@ -7,7 +7,6 @@
 ## 目录
 
 - [功能](#功能)
-- [目录结构](#目录结构)
 - [使用方法](#使用方法)
   - [1. 准备](#1-准备)
   - [2. 配置](#2-配置)
@@ -24,37 +23,15 @@
 
 ## 功能
 
-- ✅ 自动从多个网站抓取 Cloudflare 优选 IP（`ip.txt`）
-- ✅ 抓取结果包含**运营商线路 + 延迟**，按延迟升序排列
-- ✅ 自动丢弃延迟 **>150ms** 的 IP，优先使用 **90ms 以下** 的 IP 做解析
+- ✅ 自动从多个网站抓取 Cloudflare 优选 IP（`ip.txt`）结果按**运营商线路 + 延迟**，按延迟升序排列
 - ✅ 自动把优选 IP 写入 DNS 解析记录，子域名始终指向最快的 IP
   - 支持 **多云厂商**：目前支持 Cloudflare、华为云国际版
   - 支持 **多域名**：一个配置文件管理多个域名
-  - 支持 **区域选择**：华为云等区域型厂商，每个域名可独立配置 `region` / `project_id` / `line`（解析线路）
-  - 支持 **多线路分组**：华为云可设 `line: 电信,联通,移动`，每条运营商线路单独一个记录集、各用最低延迟 IP
+  - 支持 **区域选择**：华为云等区域型厂商，每个域名可独立配置`line: 电信,联通,移动`解析线路
 - ✅ 控制解析数量：每个子域名最多添加几个 IP，可自行配置（默认 10，上限 10）
 - ✅ 采集 IP 数量不足时，自动删除多余的旧 DNS 记录
 - ✅ 敏感域名可从 `config.yml` 隐藏，通过环境变量（GitHub Secrets）注入
 - ✅ 每 30 分钟自动运行一次（可改）
-
----
-
-## 目录结构
-
-```
-.
-├── bestdomain.py            # 主框架：读 config.yml，分发到各厂商插件
-├── collect_ips.py           # 抓取优选 IP，生成 ip.txt
-├── config.yml                # 配置文件（你需要改的地方）
-├── ip.txt                    # 抓取到的优选 IP 列表（由 Actions 自动更新）
-├── providers/                # 各云厂商插件目录
-│   ├── cloudflare.py      # Cloudflare 插件
-│   ├── huaweicloud.py     # 华为云国际版插件
-│   └── huawei_sdk_client.py # 华为云 SDK 封装
-└── .github/workflows/
-    ├── fetch-ips.yml           # 定时抓取 IP 并更新 ip.txt
-    └── sync-dns.yml            # 定时把 ip.txt 的 IP 同步到 DNS
-```
 
 ---
 
@@ -82,7 +59,9 @@
    | Secret 名 | 说明 |
    |-----------|------|
    | `CF_API_TOKEN` | Cloudflare 令牌（需 `Zone:Read` + `DNS:Edit` 权限） |
-   | `CF_ZONE` | (可选) 你托管在 Cloudflare 的域名，配合 `zone_env` 隐藏真实域名 |
+   | `CF_ZONE` | 你托管在 Cloudflare 的顶级域名（隐藏真实域名，配 `zone_env: CF_ZONE`） |
+   | `HUAWEI_ZONE` | 华为云托管域名（配 `zone_env: HUAWEI_ZONE`，用华为云时） |
+   | `HUAWEI_ZONE_PROJECT` | 华为云项目 ID（配 `project_id_env`，用华为云时） |
    | `HUAWEICLOUD_SDK_AK` | 华为云 Access Key ID |
    | `HUAWEICLOUD_SDK_SK` | 华为云 Secret Access Key |
 
