@@ -74,7 +74,7 @@ def create_dns_record(api_token, zone_id, record_name, ip):
         "type": "A",
         "name": record_name,
         "content": ip,
-        "ttl": 1,
+        "ttl": 300,
         "proxied": False
     }
     response = requests.post(
