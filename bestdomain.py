@@ -135,14 +135,31 @@ def process_domain(module, provider_id, credentials, domain_config, ip_list):
             print('  跳过：域名级参数缺失（如 project_id）')
             return
 
-    # zone 读取优先级：域名段 zone_env 指定的环境变量 > config.yml zone 明文
-    # 这样公开仓库可把 zone 留空、真实域名通过 GitHub Secrets 注入环境变量隐藏。
+    # zone 读取优先级：
+    #   1) 域名段 zone_key + zone_env → 把环境变量当作 JSON 映射 {"key": "zone"}，按 zone_key 取值
+    #      （用于多域名同账号场景：所有真实域名塞进同一个 Secret，域名段用 zone_key 区分）
+    #   2) zone_env 指定的环境变量（直接是该域名 zone）
+    #   3) config.yml zone 明文
+    # 这样公开仓库可把真实域名隐藏，通过 GitHub Secrets 注入环境变量。
     zone = ''
     zone_env = domain_config.get('zone_env', '').strip()
-    if zone_env:
-        zone = os.getenv(zone_env, '').strip()
+    zone_key = domain_config.get('zone_key', '').strip()
+    raw = os.getenv(zone_env, '').strip() if zone_env else ''
+    if zone_key and raw:
+        import json
+        try:
+            mapping = json.loads(raw)
+            zone = str(mapping.get(zone_key, '')).strip() if isinstance(mapping, dict) else ''
+        except json.JSONDecodeError:
+            zone = ''
+    elif zone_env:
+        zone = raw
     if not zone:
         zone = domain_config.get('zone', '').strip()
+    if zone_key and not zone:
+        print(f'  跳过：zone 为空（Secret {zone_env} 里缺少 zone_key={zone_key}，'
+              f'或它不是合法的 JSON 映射）')
+        return
     subdomains = domain_config.get('subdomains', []) or []
     if not subdomains:
         print('  跳过：subdomains 为空')

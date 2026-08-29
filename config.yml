@@ -2,54 +2,72 @@
 # cf-best-domain 配置
 #
 # 结构：
-# 1) ip_source  全局默认优选 IP 来源（每行一个 IP）
+# 1) ip_source  优选 IP 的来源网页（每行一个 IP）
 # 2) providers  各云厂商的「非凭据」可选默认参数段
 # 3) domains    要更新的域名列表，每个域名一段
 #   - provider     用哪个厂商（cloudflare / huaweicloud）
 #   - zone         在该厂商绑定的顶级域名
 #   - subdomains   要解析的子域名前缀列表
 #   - max_ips      (可选) 每个子域名最多解析几个 IP，默认 10，上限 10
-#   - ip_source    (可选) 该域名独立 IP 源，省略则用全局 ip_source
+#   - ip_source    (可选) 该域名独立的优选 IP 来源，省略则用全局 ip_source
 #
-# 规则：识别到已注入云厂商账号凭据环境变量才运行；未注入/空则自动跳过。
+# 规则：识别到已注入云厂商凭据环境变量才运行；没注入/为空则自动跳过。
 # 同一 IP 源可提供给多个厂商多个域名，互不影响。
 # =====================================================
 
-# 全局默认 IP 源（collect_ips.py 采集生成的 ip.txt 的 Raw 链接）
+# 全局默认优选 IP 来源（collect_ips.py 采集生成的 ip.txt 的 Raw 链接）
 # ip.txt 行格式：`IP#线路#延迟`，线路为 电信/联通/移动/ANY，延迟单位 ms（无延迟留空）。
 # 采集端已丢弃延迟 >150ms 的 IP；文件内按 (线路, 延迟升序) 排序，
 # 同步 DNS 时各线路/CF 取前 max_ips 个 → 自动优先 90ms 以下、90-150ms 补足。
 ip_source: https://raw.githubusercontent.com/cnrot/cf-best-domain/refs/heads/main/ip.txt
 
-# 各云厂商段。凭据不写在这里，一律用 GitHub Secrets 注入环境变量：
+# 各云厂商段。密钥（令牌/Access Key 等）不写在这里，一律写在 GitHub Secrets 的环境变量里：
 #   Cloudflare    : CF_API_TOKEN
 #   华为云国际版   : HUAWEICLOUD_SDK_AK / HUAWEICLOUD_SDK_SK
 # 这里只放厂商级「非凭据」可选默认值（如 region/endpoint），域名段也可单独覆盖。
 providers:
-  cloudflare: {}          # 凭据用环境变量 CF_API_TOKEN 注入，此处无需填任何密钥
+  cloudflare: {}          # 密钥在环境变量 CF_API_TOKEN 里，此处无需填任何密钥
 
-  huaweicloud:            # 凭据用环境变量 HUAWEICLOUD_SDK_AK / HUAWEICLOUD_SDK_SK 注入
+  huaweicloud:            # 密钥在环境变量 HUAWEICLOUD_SDK_AK / HUAWEICLOUD_SDK_SK 里
     # region: ap-southeast-1   # (可选) 默认区域，也可在每个域名段单独写
     # endpoint: ...            # (可选) 自定义端点，指定则优先于 region
 
 # 要更新的域名
-# 全部通过环境变量(GitHub Secrets)注入，仓库内不留明文域名：
-#   - provider: cloudflare    zone 从 CF_ZONE 读取
-#   - provider: huaweicloud   zone 从 HUAWEI_ZONE 读取
+# 全部把真实域名放在 GitHub Secrets 的环境变量里，仓库内不留明文域名：
+#   - provider: cloudflare    域名在环境变量 CF_ZONE 里
+#   - provider: huaweicloud   域名在环境变量 HUAWEI_ZONE 里
+#
+# 多域名区分方式（两种任选）：
+#   方式一 每个域名一个环境变量：域名段写 zone_env: CF_ZONE2，GitHub 建对应环境变量。
+#   方式二 一个环境变量装多个域名（推荐，不用每域名建变量）：
+#     GitHub 建一个环境变量，值是一串「编号: 真实域名」配对，如
+#       CF_ZONES = {"a":"a.com", "b":"b.net"}
+#     config.yml 域名段写 zone_env: CF_ZONES + zone_key: a，
+#     就是让程序从 CF_ZONES 里按编号 a 取出真实域名 a.com。
+#     之后新增域名：只改该环境变量的值加一对编号 → config.yml 加一段 zone_key 即可。
 domains:
   - provider: cloudflare
-    zone_env: CF_ZONE              # 真实域名从 Secret CF_ZONE 读取（本地开发可临时写 zone）
+    zone_env: CF_ZONE              # 真实域名在环境变量 CF_ZONE 里（本地开发可临时写 zone）
     subdomains:
       - bestcf
      # - api
     max_ips: 5
     # ip_source: https://你的独立IP源（可选）
 
+  # 同账号第二个域名示例（方式二，多个域名共用一个环境变量）：
+  # - provider: cloudflare
+  #   zone_env: CF_ZONES           # 环境变量 CF_ZONES = {"a":"a.com","b":"b.net"}
+  #   zone_key: b                  # 编号 b → 取出 b.net
+  #   subdomains:
+  #     - bestcf
+  #     - cdn
+  #   max_ips: 3
+
   # 华为云国际版示例（region/project_id 是区域型厂商必填/常见参数，每个域名可独立）
   - provider: huaweicloud
-    zone_env: HUAWEI_ZONE          # 真实域名从 Secret HUAWEI_ZONE 读取
+    zone_env: HUAWEI_ZONE          # 真实域名在环境变量 HUAWEI_ZONE 里
     region: ap-southeast-1        # 华为云区域（如香港 ap-southeast-1）
-    project_id_env: HUAWEI_ZONE_PROJECT   # 项目ID从 Secret 读取（必填）
+    project_id_env: HUAWEI_ZONE_PROJECT   # 项目ID在环境变量 HUAWEI_ZONE_PROJECT 里（必填）
     line: 电信,联通,移动           # (可选) 解析线路：单值如 default_view，或多线路如 电信,联通,移动
                                   #       多线路时每条线路一个记录集，放对应运营商优选 IP（不足用通用 IP 补足）
     subdomains:
