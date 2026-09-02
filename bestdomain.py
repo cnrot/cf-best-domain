@@ -21,8 +21,8 @@ import requests
 import yaml
 
 CONFIG_FILE = 'config.yml'
-MAX_IPS_DEFAULT = 10          # 每个子域名默认最多解析的 IP 数量
-MAX_IPS_CAP = 10              # 硬上限
+MAX_IPS_DEFAULT = 20          # 每个子域名默认最多解析的 IP 数量
+MAX_IPS_CAP = 20              # 硬上限
 IP_SOURCE_DEFAULT_ENV = 'IP_SOURCE_URL'   # 允许通过环境变量给默认 IP 源
 
 # 插件清单：厂商标识 -> 插件模块名
