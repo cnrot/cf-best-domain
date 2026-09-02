@@ -12,3 +12,6 @@ config.local.yml
 # IDE
 .idea/
 .vscode/
+
+# 采集产物（由 fetch-ips.yml 工作流在 GitHub Actions 内生成并提交，本地不入库）
+ip.txt
