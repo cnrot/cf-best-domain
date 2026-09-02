@@ -12,11 +12,13 @@ headers = {
 # 目标URL列表
 # 已移除 https://stock.hostmonit.com/CloudFlareYes（站点转型为 VPS 监控，CF 优选 IP 业务下线）。
 # https://cf.090227.xyz 已改为前端 JS 渲染，但其后端纯文本接口可直连：
-#   https://addressesapi.090227.xyz/CloudFlareYes  格式为 `IP#运营商线路`（无延迟，但顺序即优选序）
+#   https://cf.090227.xyz/{ct,cmcc,cu}  分线路纯文本，格式 `IP#线路`（电信/移动/联通优选，无延迟）
 # ip.164746.xyz 改抓首页表格（含延迟），原 ipTop10.html 仅 1 个 IP 且无延迟。
 urls = [
     'https://ip.164746.xyz/',
-    'https://addressesapi.090227.xyz/CloudFlareYes',
+    'https://cf.090227.xyz/ct',
+    'https://cf.090227.xyz/cmcc',
+    'https://cf.090227.xyz/cu',
     'https://api.uouin.com/cloudflare.html',
     'https://www.wetest.vip/page/cloudflare/address_v4.html',
 ]
@@ -130,22 +132,23 @@ for url in urls:
             time.sleep(1)
             continue
 
-        if url == 'https://addressesapi.090227.xyz/CloudFlareYes':
-            # 纯文本，格式 `IP#运营商线路`（如 104.17.245.114#CT-Default）
-            # 该接口无延迟数据。不用行号当假延迟（会扭曲按延迟排序），
-            # 留空延迟(None)，排序时排到该线路最后，让有真实延迟的 IP 优先。
+        if url in ('https://cf.090227.xyz/ct', 'https://cf.090227.xyz/cmcc', 'https://cf.090227.xyz/cu'):
+            # 分线路纯文本，格式 `IP#线路`（全为同一线路的优选 IP，无延迟）
+            # /ct→电信、/cmcc→移动、/cu→联通；行尾线路标签如 'CF 电信优选'
+            # 直接用路径映射线路；延迟留空(None)，排序时对该线路排最后。
+            line_map = {'ct': '电信', 'cmcc': '移动', 'cu': '联通'}
+            line = line_map[url.rsplit('/', 1)[1]]
             count = 0
             for raw in text.splitlines():
                 raw = raw.strip()
                 if not raw:
                     continue
-                if '#' in raw:
-                    ip, _, tag = raw.partition('#')
-                else:
-                    ip, tag = raw, 'ANY'
-                ip = ip.strip()
+                ip = raw.split('#')[0].strip()
                 if re.fullmatch(ip_pattern, ip):
-                    add_ip(ip, tag, None)
+                    # 该站为 CM 付费精选源，无延迟但优选度极高。
+                    # 用自增序当哨兵延迟(0,1,2..)：既让它们排在该线路所有真实延迟最前参与竞争，
+                    # 又保持上游内部顺序（小延迟→优先）；且不会被 MAX_LATENCY 丢弃。
+                    add_ip(ip, line, float(count))
                     count += 1
             print(f"  从{url}找到{count}个IP")
             continue
