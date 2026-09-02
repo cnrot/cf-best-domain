@@ -28,7 +28,7 @@ ip_pattern = r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
 
 # 延迟阈值（毫秒）：超过 MAX_LATENCY 的 IP 丢弃，不写入 ip.txt。
 # 90ms 以下的优先使用——由 ip.txt 内按延迟升序排序 + 同步端取前 N 个 自动保证。
-MAX_LATENCY = 150.0
+MAX_LATENCY = 120.0
 
 # 运营商线路标签归一化：
 #   090227 的 CM-Default / CU-Default / CT-Default → 移动 / 联通 / 电信
