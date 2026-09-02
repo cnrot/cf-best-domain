@@ -15,3 +15,6 @@ config.local.yml
 
 # 采集产物（由 fetch-ips.yml 工作流在 GitHub Actions 内生成并提交，本地不入库）
 ip.txt
+
+# 本地开发指引（含全局/项目环境说明，仅作者本地维护）
+CLAUDE.md
